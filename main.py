@@ -4,6 +4,7 @@ import json
 import asyncio
 import uvicorn
 from typing import Dict, Any, List
+import os
 
 app = FastAPI(title="JSON Streamer", 
               description="API for streaming JSON content gradually, similar to how LLMs stream their responses.")
@@ -127,6 +128,24 @@ async def stream_json(request: Request):
 @app.get("/")
 async def root():
     return {"message": "Welcome to JSON Streamer API. Use /stream endpoint to stream JSON content or visit /docs for interactive documentation."}
+
+@app.get("/test", summary="Stream main.json character by character", 
+         description="Simple endpoint that streams main.json character by character like an LLM")
+async def test():
+    # Load the JSON file
+    try:
+        with open("main.json", "r") as file:
+            content = file.read()
+    except FileNotFoundError:
+        return {"error": "Could not load main.json file"}
+    
+    async def generate():
+        # Stream character by character with a small delay
+        for char in content:
+            yield char
+            await asyncio.sleep(0.01)  # Small delay between characters
+    
+    return StreamingResponse(generate(), media_type="application/json")
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 

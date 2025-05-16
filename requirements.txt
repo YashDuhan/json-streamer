@@ -2,4 +2,4 @@ fastapi
 uvicorn
 starlette
 pydantic
-python-multipart
+python-multipart 
