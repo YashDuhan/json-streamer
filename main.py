@@ -14,98 +14,113 @@ async def stream_json(request: Request):
     data = await request.json()
     
     async def generate():
+        # For simple values
+        if isinstance(data, (int, float, str, bool)) or data is None:
+            yield json.dumps(data)
+            return
+            
+        # For dictionaries
         if isinstance(data, dict):
             yield "{"
-            first_item = True
+            is_first = True
+            
             for key, value in data.items():
-                if not first_item:
+                if not is_first:
                     yield ", "
                 else:
-                    first_item = False
+                    is_first = False
                 
+                # Key
                 yield f'"{key}": '
                 
+                # String values
                 if isinstance(value, str):
-                    for chunk in await stream_string(value):
+                    yield '"'
+                    for i in range(0, len(value), 3):
+                        chunk = value[i:i+3].replace('"', '\\"')
                         yield chunk
+                        await asyncio.sleep(0.1)
+                    yield '"'
+                
+                # Simple values
                 elif isinstance(value, (int, float, bool)) or value is None:
                     yield json.dumps(value)
-                elif isinstance(value, dict):
-                    for chunk in await stream_dict(value):
-                        yield chunk
-                elif isinstance(value, list):
-                    for chunk in await stream_list(value):
-                        yield chunk
                 
-                await asyncio.sleep(0.5)
+                # Nested dictionaries
+                elif isinstance(value, dict):
+                    yield "{"
+                    inner_first = True
+                    
+                    for inner_key, inner_value in value.items():
+                        if not inner_first:
+                            yield ", "
+                        else:
+                            inner_first = False
+                        
+                        yield f'"{inner_key}": '
+                        
+                        # Inner values are dumped directly to avoid recursion
+                        yield json.dumps(inner_value)
+                        await asyncio.sleep(0.1)
+                    
+                    yield "}"
+                
+                # Lists/arrays
+                elif isinstance(value, list):
+                    yield "["
+                    inner_first = True
+                    
+                    for item in value:
+                        if not inner_first:
+                            yield ", "
+                        else:
+                            inner_first = False
+                        
+                        # List items are dumped directly to avoid recursion
+                        yield json.dumps(item)
+                        await asyncio.sleep(0.1)
+                    
+                    yield "]"
+                
+                await asyncio.sleep(0.2)
+            
             yield "}"
         
+        # For lists/arrays
         elif isinstance(data, list):
-            async for chunk in stream_list(data):
-                yield chunk
-        else:
-            yield json.dumps(data)
-    
-    async def stream_string(value: str):
-        chunks = ['"']
-        for i in range(0, len(value), 3):
-            chunk = value[i:i+3]
-            chunks.append(chunk.replace('"', '\\"'))
-            await asyncio.sleep(0.1)
-        chunks.append('"')
-        return chunks
-    
-    async def stream_dict(d: Dict[str, Any]):
-        chunks = ["{"]
-        first_item = True
-        for key, value in d.items():
-            if not first_item:
-                chunks.append(", ")
-            else:
-                first_item = False
+            yield "["
+            is_first = True
             
-            chunks.append(f'"{key}": ')
+            for item in data:
+                if not is_first:
+                    yield ", "
+                else:
+                    is_first = False
+                
+                # String items
+                if isinstance(item, str):
+                    yield '"'
+                    for i in range(0, len(item), 3):
+                        chunk = item[i:i+3].replace('"', '\\"')
+                        yield chunk
+                        await asyncio.sleep(0.1)
+                    yield '"'
+                
+                # Simple items
+                elif isinstance(item, (int, float, bool)) or item is None:
+                    yield json.dumps(item)
+                
+                # Dict items - simple version without deeper nesting
+                elif isinstance(item, dict):
+                    yield json.dumps(item)
+                
+                # List items - simple version without deeper nesting
+                elif isinstance(item, list):
+                    yield json.dumps(item)
+                
+                await asyncio.sleep(0.2)
             
-            if isinstance(value, str):
-                for chunk in await stream_string(value):
-                    chunks.append(chunk)
-            elif isinstance(value, (int, float, bool)) or value is None:
-                chunks.append(json.dumps(value))
-            elif isinstance(value, dict):
-                for chunk in await stream_dict(value):
-                    chunks.append(chunk)
-            elif isinstance(value, list):
-                for chunk in await stream_list(value):
-                    chunks.append(chunk)
-            
-            await asyncio.sleep(0.2)
-        chunks.append("}")
-        return chunks
-    
-    async def stream_list(l: List[Any]):
-        chunks = ["["]
-        first_item = True
-        for item in l:
-            if not first_item:
-                chunks.append(", ")
-            else:
-                first_item = False
-            
-            if isinstance(item, str):
-                for chunk in await stream_string(item):
-                    chunks.append(chunk)
-            elif isinstance(item, (int, float, bool)) or item is None:
-                chunks.append(json.dumps(item))
-            elif isinstance(item, dict):
-                for chunk in await stream_dict(item):
-                    chunks.append(chunk)
-            elif isinstance(item, list):
-                for chunk in await stream_list(item):
-                    chunks.append(chunk)
-            
-            await asyncio.sleep(0.2)
-        chunks.append("]")
-        return chunks
+            yield "]"
     
     return StreamingResponse(generate(), media_type="application/json")
 
